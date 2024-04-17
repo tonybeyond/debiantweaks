@@ -99,17 +99,29 @@ install_brave_browser () {
     install_packages brave-browser || log_error "Failed to install Brave browser"
 }
 
+# Function to install virtualization packages
+install_virtualization () {
+    echo "Installing virtualization stack with QEMU/KVM..."
+    install_packages qemu-kvm libvirt-clients libvirt-daemon-system bridge-utils virtinst libvirt-daemon virt-manager || log_error "Failed to install virtualization packages"
+    echo "Enabling and starting libvirtd service..."
+    sudo virsh net-start default
+    sudo virsh net-autostart default
+    sudo systemctl enable libvirtd.service
+    sudo systemctl start libvirtd
+    echo "<<< ----- Adding user to libvirt and libvirt-qemu groups ----- >>>"
+    sudo adduser $USER libvirt
+    sudo adduser $USER libvirt-qemu
+}
 # Function to install Neovim from repo
 install_neovim () {
     echo "Compiling Neovim ..."
      cd "$DOWNLOADS_PATH" || log_error "Failed to change directory to $DOWNLOADS_PATH"
 
     if [ ! -d "neovim" ]; then
-        git clone https://github.com/neovim/neovim || log_error "Failed to clone Neovim repository"
+        git clone https://github.com/neovim/neovim --branch=stable --depth=1  || log_error "Failed to clone Neovim repository"
     fi
 
     cd neovim || log_error "Failed to change directory to neovim"
-    git switch -c stable || log_error "Failed to switch to stable branch"
     make CMAKE_BUILD_TYPE=RelWithDebInfo || log_error "Failed to run make in neovim folder"
     cd build && cpack -G DEB && sudo dpkg -i nvim-linux64.deb || log_error "Failed to run make install in neovim folder"
  }
@@ -187,38 +199,76 @@ if ! sudo -n true 2>/dev/null; then
 fi
 
 # Main script
-echo "---------------------****************** INSTALL GIT *************************************-----------------------------------"
+echo "*************************************************"
+echo "****************** INSTALL GIT ******************"
+echo "*************************************************"
 install_git
-echo "---------------------*************** REMOVE UNWANTED PACKAGES ***************************-----------------------------------"
+echo "*************************************************"
+echo "************ REMOVE UNWANTED PACKAGES ***********"
+echo "*************************************************"
 remove_unwanted_packages
-echo "---------------------************** INSTALL REQUIRED PACKAGES ***************************-----------------------------------"
+echo "*************************************************"
+echo "******** INSTALL REQUIRED PACKAGES **************"
+echo "*************************************************"
 install_other_packages
-echo "---------------------************** INSTALL NERD FONTS **********************************-----------------------------------"
+echo "*************************************************"
+echo "************** INSTALL NERD FONTS ***************"
+echo "*************************************************"
 install_nerd_fonts
-echo "---------------------*********************** MODIFY LOCALES *****************************-----------------------------------"
+echo "*************************************************"
+echo "**************** MODIFY LOCALES ****************"
+echo "*************************************************"
 modify_locales
-echo "---------------------************* ADD DRACULA THEME TO GNOME TERMINAL ******************-----------------------------------"
+echo "*************************************************"
+echo "******** ADD DRACULA THEME TO GNOME TERMINAL ****"
+echo "*************************************************"
 add_dracula_theme
-echo "---------------------************ COPY FISH CONFIG & MAKE IT DEFAULT SHELL **************-----------------------------------"
+echo "*************************************************"
+echo "**** COPY FISH CONFIG & MAKE IT DEFAULT SHELL ***"
+echo "*************************************************"
 copy_fish_config
-echo "---------------------******************** COPYING TERMINATOR CONFIG *********************-----------------------------------"
+echo "*************************************************"
+echo "************ COPYING TERMINATOR CONFIG **********"
+echo "*************************************************"
 copy_terminator_config
-echo "---------------------******************* INSTALLING BRAVE BROWSER ***********************-----------------------------------"
+echo "*************************************************"
+echo "********** INSTALLING BRAVE BROWSER *************"
+echo "*************************************************"
 install_brave_browser
-echo "---------------------************************** COMPILING NEOVIM ************************-----------------------------------"
+echo "*************************************************"
+echo "**************** COMPILING NEOVIM ***************"
+echo "*************************************************"
 install_neovim
-echo "---------------------*********************** INSTALLING DEB PACKAGES ********************-----------------------------------"
+echo "*************************************************"
+echo "*********** INSTALLING DEB PACKAGES *************"
+echo "*************************************************"
 install_debs
-echo "---------------------************************* INSTALLING NETBIRD ***********************-----------------------------------"
-install_netbrid
-echo "---------------------********************** INSTALLING STARSHIP *************************-----------------------------------"
+echo "*************************************************"
+echo "************* INSTALLING NETBIRD ****************"
+echo "*************************************************"
+install_netbird
+echo "*************************************************"
+echo "************ INSTALLING STARSHIP ****************"
+echo "*************************************************"
 install_starship
-echo "---------------------******************* INSTALLING EVE Integrations ********************-----------------------------------"
+echo "*************************************************"
+echo "******* INSTALLING EVE Integrations *************"
+echo "*************************************************"
 add_eve
-echo "---------------------****************** INSTALL POP SHELL GNOME EXTENSION ***************-----------------------------------"
+echo "*************************************************"
+echo "******** INSTALLING VIRTUAL PACKAGES ************"
+echo "*************************************************"
+install_virtualization
+echo "*************************************************"
+echo "***** INSTALL POP SHELL GNOME EXTENSION *********"
+echo "*************************************************"
 install_pop_shell
-echo "---------------------* INSTALLATION COMPLETED, CHECK INSTALL LOG IN DOWNLOADS FOLDER FOR ERRORS *---------------------------"
-echo "adding current user to wireshark group"
+echo "**************************************************************************************"
+echo " >>> INSTALLATION COMPLETED, CHECK INSTALL LOG IN DOWNLOADS FOLDER FOR ANY ERRORS <<< "
+echo "**************************************************************************************"
+echo " >>>> WAIT, one last thing : adding current user to wireshark group"
 sudo usermod -a -G wireshark $USER
-echo "-----------------------------------------* NOW REBOOTING AND ENJOY YOUR DEBIAN *--------------------------------------------"
+echo "**************************************************************************************"
+echo " >>>                   NOW REBOOTING AND ENJOY YOUR DEBIAN                         <<<"
+echo "**************************************************************************************"
 sudo reboot
