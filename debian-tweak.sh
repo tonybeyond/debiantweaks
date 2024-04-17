@@ -135,8 +135,15 @@ copy_fish_config () {
     echo "Copying Fish configuration..."
     mkdir -p "$HOME/.config/fish/" || log_error "Failed to create fish config folder"
     cp "$GIT_REPO/config.fish" "$HOME/.config/fish/config.fish" || log_error "Failed to copy Fish configuration"
-    echo "Chaning default shell to fish"
+    echo "Changing default shell to fish"
     sudo usermod --shell /usr/bin/fish $USER || log_error "Failed to change current user shell to fish"
+}
+
+# Function to copy Terminator configuration
+copy_terminator_config () {
+    echo "Copying Terminator configuration..."
+    mkdir -p "$HOME/.config/terminator/" || log_error "Failed to create fish config folder"
+    cp "$GIT_REPO/config" "$HOME/.config/terminator/config" || log_error "Failed to copy Fish configuration"
 }
 
 # Function to install downloaded .deb packages
@@ -192,8 +199,10 @@ echo "---------------------*********************** MODIFY LOCALES **************
 modify_locales
 echo "---------------------************* ADD DRACULA THEME TO GNOME TERMINAL ******************-----------------------------------"
 add_dracula_theme
-echo "---------------------*************** STARTING FISH AND COPYING CONFIG *******************-----------------------------------"
+echo "---------------------************ COPY FISH CONFIG & MAKE IT DEFAULT SHELL **************-----------------------------------"
 copy_fish_config
+echo "---------------------******************** COPYING TERMINATOR CONFIG *********************-----------------------------------"
+copy_terminator_config
 echo "---------------------******************* INSTALLING BRAVE BROWSER ***********************-----------------------------------"
 install_brave_browser
 echo "---------------------************************** COMPILING NEOVIM ************************-----------------------------------"
