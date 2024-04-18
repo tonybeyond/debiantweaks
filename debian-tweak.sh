@@ -151,6 +151,8 @@ copy_fish_config () {
     cp "$GIT_REPO/config.fish" "$HOME/.config/fish/config.fish" || log_error "Failed to copy Fish configuration"
     echo "Changing default shell to fish"
     sudo usermod --shell /usr/bin/fish $USER || log_error "Failed to change current user shell to fish"
+    echo "Installing fisher plugin manager for fish"
+    curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source && fisher install jorgebucaran/fisher
 }
 
 # Function to copy Terminator configuration
@@ -270,6 +272,8 @@ echo " >>> INSTALLATION COMPLETED, CHECK INSTALL LOG IN DOWNLOADS FOLDER FOR ANY
 echo "**************************************************************************************"
 echo " >>>> WAIT, one last thing : adding current user to wireshark group"
 sudo usermod -a -G wireshark $USER
+echo " >>>> WAIT, again... my wife...: adding fzf plugin to fish"
+fisher install jethrokuan/fzf
 echo "**************************************************************************************"
 echo " >>>                   NOW REBOOTING AND ENJOY YOUR DEBIAN                         <<<"
 echo "**************************************************************************************"
