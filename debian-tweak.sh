@@ -273,6 +273,7 @@ echo "**************************************************************************
 echo " >>>> WAIT, one last thing : adding current user to wireshark group"
 sudo usermod -a -G wireshark $USER
 echo " >>>> WAIT, again... my wife...: adding fzf plugin to fish"
+fish
 fisher install jethrokuan/fzf
 echo "**************************************************************************************"
 echo " >>>                   NOW REBOOTING AND ENJOY YOUR DEBIAN                         <<<"
