@@ -124,6 +124,8 @@ install_neovim () {
     cd neovim || log_error "Failed to change directory to neovim"
     make CMAKE_BUILD_TYPE=RelWithDebInfo || log_error "Failed to run make in neovim folder"
     cd build && cpack -G DEB && sudo dpkg -i nvim-linux64.deb || log_error "Failed to run make install in neovim folder"
+    echo "Installing Default kickstart config..."
+    git clone https://github.com/nvim-lua/kickstart.nvim.git "${XDG_CONFIG_HOME:-$HOME/.config}"/nvim || log_error "Failed clone kickstart neovim config"
  }
 
 # Function to modify locales
