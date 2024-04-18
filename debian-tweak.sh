@@ -5,6 +5,7 @@ DOWNLOADS_PATH="$HOME/Downloads"
 GIT_REPO="$DOWNLOADS_PATH/debiantweaks"
 URL1="https://github.com/obsidianmd/obsidian-releases/releases/download/v1.5.12/obsidian_1.5.12_amd64.deb"
 URL2="https://vscode.download.prss.microsoft.com/dbazure/download/stable/e170252f762678dec6ca2cc69aba1570769a5d39/code_1.88.1-1712771838_amd64.deb"
+URL3="https://proton.me/download/mail/linux/ProtonMail-desktop-beta.deb"
 
 # Function to log errors
 log_error () {
@@ -169,7 +170,9 @@ install_debs () {
     wget "$URL1" -O obsidian.deb || log_error "Failed to download obsidian deb package"
     sudo dpkg -i obsidian.deb || log_error "Failed to install obsidian debian package"
     wget "$URL2" -O vscode.deb || log_error "Failed to download obsidian deb package"
-    sudo dpkg -i vscode.deb || log_error "Failed to install obsidian debian package"i
+    sudo dpkg -i vscode.deb || log_error "Failed to install obsidian debian package"
+    wget "$URL3" -O vscode.deb || log_error "Failed to download obsidian deb package"
+    sudo dpkg -i proton.deb || log_error "Failed to install proton mail debian package"
 }
 
 # Function to add Dracula theme to GNOME Terminal
