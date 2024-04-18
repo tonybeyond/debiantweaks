@@ -25,12 +25,12 @@ As root user
 
 Define the directory for VM Disks
 ``` bash
-virsh pool-define-as --name "Disk Images" --type dir --target /media/fedo/VMdisk/VMmainDisk/
+virsh pool-define-as --name "Disk Images" --type dir --target ~/VMs/VMmainDisk/
 ```
 
 Define the directory for Installation Media
 ``` bash
-virsh pool-define-as --name "Installation Media" --type dir --target /media/fedo/MiscData/ISOs/
+virsh pool-define-as --name "Installation Media" --type dir --target ~/VMs/ISOs/
 ```
 
 Start the pools
