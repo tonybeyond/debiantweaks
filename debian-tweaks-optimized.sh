@@ -189,16 +189,26 @@ copy_terminator_config () {
 }
 
 # Function to install downloaded .deb packages
-install_debs () {
+install_debs {
     local deb_urls=("$URL1" "$URL2" "$URL3")
     local deb_names=("obsidian.deb" "vscode.deb" "proton.deb")
-    cd "$DOWNLOADS_PATH" || log_error "Failed to change directory to $DOWNLOADS_PATH"
-    echo "Installing deb downloaded packages"
+
+    if [ ${#deb_urls[@]} -ne 3 ]; then
+        log_error "Incorrect number of URLs provided. Please provide three URLs."
+        return 1
+    fi
+
     for i in ${!deb_urls[@]}; do
-        wget "${deb_urls[$i]}" -O "${deb_names[$i]}" || log_error "Failed to download ${deb_names[$i]} package"
-        sudo dpkg -i "${deb_names[$i]}" || log_error "Failed to install ${deb_names[$i]} debian package"
+        if [ ! "${deb_urls[$i]}" =~ ^https?:// ]; then
+            log_error "Invalid URL format. Please provide a valid URL."
+            return 1
+        fi
+
+        wget "${deb_urls[$i]}" -O "${deb_names[i]}" || log_error "Failed to download ${deb_names[i]} package"
+        sudo dpkg -i "${deb_names[i]}" || log_error "Failed to install ${deb_names[i]} debian package"
     done
 }
+
 
 # Function to add Dracula theme to GNOME Terminal
 add_dracula_theme () {
@@ -248,21 +258,31 @@ main_installation() {
         install_git
     fi
 
+    echo "Starting installation..."
+
+    # Install required packages
+    install_git
     remove_unwanted_packages
     install_required_packages
-    install_nerd_fonts
+
+    # Configure system
     modify_locales
     add_dracula_theme
     copy_fish_config
     copy_terminator_config
+
+    # Install applications
     install_brave_browser
     install_neovim
-    install_debs
     install_netbird
     install_starship
     add_eve
+
+    # Virtualization and pop shell
     install_virtualization
     install_pop_shell
+
+    echo "Installation completed successfully."
 }
 
 #### Check if the script has sudo privileges
@@ -274,9 +294,6 @@ fi
 
 # Main script
 main_installation
-
-# Final steps
-echo "Installation completed successfully."
 
 # Additional operations
 sudo usermod -a -G wireshark $USER
