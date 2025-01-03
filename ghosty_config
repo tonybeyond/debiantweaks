@@ -1,0 +1,18 @@
+theme = catppuccin-mocha
+window-decoration = false
+window-theme = system
+unfocused-split-opacity = 0.30
+#unfocused-split-fill = "gray"
+
+
+keybind = shift+ctrl+r=reload_config
+
+keybind = shift+ctrl+h=new_split:left
+keybind = shift+ctrl+j=new_split:down
+keybind = shift+ctrl+k=new_split:up
+keybind = shift+ctrl+l=new_split:right
+
+keybind = shift+ctrl+left=goto_split:left
+keybind = shift+ctrl+right=goto_split:right
+keybind = shift+ctrl+up=goto_split:top
+keybind = shift+ctrl+down=goto_split:bottom
