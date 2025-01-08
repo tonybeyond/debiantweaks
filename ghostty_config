@@ -1,7 +1,9 @@
 theme = catppuccin-mocha
-window-decoration = false
-window-theme = system
+window-decoration = true
+window-theme = auto
+macos-titlebar-style = native
 unfocused-split-opacity = 0.30
+copy-on-select = true
 #unfocused-split-fill = "gray"
 
 
