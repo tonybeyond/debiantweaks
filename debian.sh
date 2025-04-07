@@ -6,12 +6,15 @@
 # - Added Initial System Cleanup phase.
 # - Removed PPA usage (LibreOffice installed from Debian Repos).
 # - Installs Liquorix Kernel & enables Backports.
+# - Adds KVM/QEMU/virt-manager virtualization support.
 # - Installs Obsidian (.deb), Neovim (binary), Brave, Chrome, VSCode.
 # - Installs Tailscale.
 # - Sets up Flatpak & Flathub.
 # - Sets up Oh My Zsh & plugins (user configuration required).
 # - Uses secure APT key/repo methods.
 # - Includes error handling and helper functions.
+# - Made wget downloads more verbose for debugging.
+# - Made cleanup trap robust against unset variables.
 
 # Exit immediately if a command exits with a non-zero status.
 # Treat unset variables as an error.
@@ -24,6 +27,10 @@ readonly SOURCES_DIR="/etc/apt/sources.list.d"
 readonly NVIM_INSTALL_DIR="/opt/nvim-linux64"
 readonly NVIM_SYMLINK="/usr/local/bin/nvim"
 readonly ZSH_CUSTOM_DIR_VARNAME="\$HOME/.oh-my-zsh/custom" # Use eval to expand later
+
+# Initialize variables used in trap to prevent unbound errors if script exits early
+tmp_dir_obsidian=""
+tmp_dir_nvim=""
 
 # --- Helper Functions ---
 log() {
@@ -38,6 +45,22 @@ error() {
     echo ">>> [ERROR] $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
     exit 1
 }
+
+# Cleanup function for trap
+cleanup_temp_dirs() {
+    log "Cleaning up temporary files..."
+    if [[ -n "$tmp_dir_obsidian" ]] && [[ -d "$tmp_dir_obsidian" ]]; then
+        rm -rf -- "$tmp_dir_obsidian"
+        log "Removed $tmp_dir_obsidian"
+    fi
+    if [[ -n "$tmp_dir_nvim" ]] && [[ -d "$tmp_dir_nvim" ]]; then
+        rm -rf -- "$tmp_dir_nvim"
+        log "Removed $tmp_dir_nvim"
+    fi
+}
+
+# Setup trap using the cleanup function
+trap cleanup_temp_dirs EXIT INT TERM HUP
 
 # Function to install packages if they are not already installed
 install_packages() {
@@ -88,43 +111,61 @@ check_install_command() {
     local pkg="${2:-$1}"
     if ! command -v "$cmd" &> /dev/null; then
         log "$cmd not found. Installing $pkg..."
-        # Avoid running apt update here repeatedly, assume it runs before major install steps
+        sudo apt-get update -y || log "Apt update failed, attempting to install anyway." # Try to update before installing prereq
         sudo apt-get install -y "$pkg" || error "Failed to install prerequisite $pkg"
     fi
 }
 
 # Function to install Oh My Zsh non-interactively
+# Function to install Oh My Zsh non-interactively (Revised Logging)
 install_oh_my_zsh() {
     local omz_dir="$HOME/.oh-my-zsh"
-     if [ -d "$omz_dir" ]; then
+    if [ -d "$omz_dir" ]; then
         log "Oh My Zsh already installed in $omz_dir. Skipping installation."
-        return 0
+        return 0 # Indicate success/already installed
     fi
-    # Ensure dependencies are present first
-    check_install_command "zsh"
-    check_install_command "git"
-    check_install_command "curl"
 
-    log "Installing Oh My Zsh (non-interactive)..."
-    if sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended; then
-        log "Oh My Zsh installation script finished."
-        if [ ! -d "$omz_dir" ]; then
-             warning "Oh My Zsh install script ran, but $omz_dir directory not found!"
-             return 1
-        fi
-        if [ ! -f "$HOME/.zshrc" ]; then
-            warning "Oh My Zsh installed, but ~/.zshrc was not created. Attempting to copy template."
-            if [ -f "$omz_dir/templates/zshrc.zsh-template" ]; then
-                 cp "$omz_dir/templates/zshrc.zsh-template" "$HOME/.zshrc"
-                 log "Copied default ~/.zshrc template."
+    log "Checking Oh My Zsh dependencies (zsh, git, curl)..."
+    # Use check_install_command to ensure they are present
+    check_install_command "zsh" || return 1
+    check_install_command "git" || return 1
+    check_install_command "curl" || return 1
+    log "Dependencies should be present."
+
+    log "Attempting Oh My Zsh installation using unattended script..."
+    # Execute the installer
+    # Run command and capture exit status immediately
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+    local exit_status=$?
+
+    # Check the exit status from the installer script
+    if [ $exit_status -eq 0 ]; then
+        log "Oh My Zsh install script finished with exit code 0."
+        # Verify installation directory exists as confirmation
+        if [ -d "$omz_dir" ]; then
+            log "Verified Oh My Zsh directory exists: $omz_dir"
+            # Check .zshrc (and copy template if missing)
+            if [ ! -f "$HOME/.zshrc" ]; then
+                warning "Oh My Zsh installed, but ~/.zshrc was not created by the installer. Attempting to copy template."
+                if [ -f "$omz_dir/templates/zshrc.zsh-template" ]; then
+                     cp "$omz_dir/templates/zshrc.zsh-template" "$HOME/.zshrc"
+                     log "Copied default ~/.zshrc template."
+                else
+                     warning "Could not find Oh My Zsh template file ($omz_dir/templates/zshrc.zsh-template)."
+                fi
             else
-                 warning "Could not find Oh My Zsh template file."
+                 log "Verified ~/.zshrc file exists."
             fi
+            return 0 # Success
+        else
+            # This case indicates the script exited 0 but didn't create the directory - unusual but possible
+            warning "Oh My Zsh install script exited 0, but directory $omz_dir was NOT created. Installation failed."
+            return 1 # Failure despite exit code 0
         fi
-        return 0
     else
-        warning "Oh My Zsh installation failed."
-        return 1
+        # Installer script itself returned an error
+        warning "Oh My Zsh installation script failed with exit code $exit_status."
+        return 1 # Failure
     fi
 }
 
@@ -157,7 +198,6 @@ if [[ "$EUID" -eq 0 ]]; then
    error "This script should not be run as root. Run as a regular user with sudo privileges."
 fi
 if ! command -v sudo &> /dev/null; then
-    # Simple check if sudo exists and the user can run it non-interactively
     if ! sudo -n true &>/dev/null; then
         error "sudo command not found or user cannot run sudo without a password. Please configure sudo privileges."
     fi
@@ -172,14 +212,8 @@ log "Starting initial system cleanup and update phase..."
 sudo apt-get update -y || warning "Initial 'apt update' failed, proceeding with caution."
 
 # Purge selected packages (customize as needed)
-# Purging LibreOffice here as we will reinstall the Debian version (no PPA used)
 log "Purging existing LibreOffice packages (will reinstall standard version later)..."
 sudo apt-get purge -y libreoffice* || warning "Failed to purge libreoffice packages, proceeding anyway."
-# Examples of other packages you might want to remove:
-# log "Purging Firefox ESR (optional)..."
-# sudo apt-get purge -y firefox-esr || warning "Failed to purge firefox-esr."
-# log "Purging GNOME Games (optional)..."
-# sudo apt-get purge -y gnome-games* elementary-games* || warning "Failed to purge gnome-games."
 
 log "Upgrading existing packages..."
 sudo apt-get upgrade -y || warning "Initial 'apt upgrade' failed, proceeding."
@@ -198,7 +232,7 @@ check_install_command "jq"
 check_install_command "wget"
 check_install_command "git"
 check_install_command "lsb-release"
-check_install_command "ca-certificates" # Often needed by curl/wget
+check_install_command "ca-certificates"
 
 # --- Configure APT Directories ---
 log "Ensuring APT configuration directories exist..."
@@ -213,7 +247,6 @@ log "Configuring APT repositories..."
 debian_codename=$(lsb_release -cs)
 log "Detected Debian Codename: $debian_codename"
 log "Enabling Debian Backports repository..."
-# Include non-free-firmware as it's often needed
 echo "deb http://deb.debian.org/debian ${debian_codename}-backports main contrib non-free non-free-firmware" | sudo tee "/etc/apt/sources.list.d/backports.list" > /dev/null || error "Failed to add Backports repository"
 log "Backports enabled. Install packages using: sudo apt install -t ${debian_codename}-backports <package>"
 
@@ -256,8 +289,8 @@ log "Flatpak configured with Flathub remote."
 log "Updating package lists after adding all repositories..."
 sudo apt-get update -y || error "Failed to update package lists after adding repositories."
 
-log "Installing base packages, tools, applications, and Liquorix Kernel..."
-# Combined list of essential tools and desired applications
+log "Installing base packages, tools, applications, Virtualization support, and Liquorix Kernel..."
+# Combined list including virtualization packages
 install_packages \
     apt-transport-https \
     software-properties-common \
@@ -285,7 +318,29 @@ install_packages \
     code \
     brave-browser \
     linux-image-liquorix-amd64 \
-    linux-headers-liquorix-amd64
+    linux-headers-liquorix-amd64 \
+    qemu-system-x86 \
+    libvirt-daemon-system \
+    libvirt-clients \
+    virt-manager \
+    bridge-utils \
+    virtinst \
+    qemu-utils \
+    ovmf \
+    dnsmasq-base
+
+# --- Configure Virtualization ---
+log "Configuring virtualization..."
+# Add current user to the libvirt group to manage VMs without sudo
+current_user=$(whoami)
+log "Adding user '$current_user' to the 'libvirt' group..."
+sudo adduser "$current_user" libvirt || warning "Failed to add user '$current_user' to libvirt group. Manual addition might be required."
+log "User '$current_user' added to libvirt group. You MUST log out and log back in for this change to take effect."
+# Ensure libvirtd service is running and enabled (usually handled by package install, but good practice)
+log "Ensuring libvirtd service is enabled and started..."
+sudo systemctl enable libvirtd || warning "Failed to enable libvirtd service."
+sudo systemctl start libvirtd || warning "Failed to start libvirtd service."
+
 
 # Install Tailscale
 log "Installing Tailscale..."
@@ -298,38 +353,34 @@ fi
 # --- Install Obsidian (.deb Latest Release) ---
 log "Installing Obsidian (latest .deb)..."
 tmp_dir_obsidian=$(mktemp -d) || error "Failed to create temporary directory for Obsidian"
-# Setup trap for cleanup - will clean all tmp dirs listed
-trap 'log "Cleaning up temporary files..."; rm -rf -- "$tmp_dir_obsidian" "$tmp_dir_nvim"' EXIT INT TERM HUP
 
 obsidian_deb_url=$(get_latest_github_asset_url "obsidianmd/obsidian-releases" "_amd64.deb$")
 obsidian_deb_file="$tmp_dir_obsidian/$(basename "$obsidian_deb_url")"
 
 log "Downloading Obsidian from $obsidian_deb_url..."
-wget --quiet -O "$obsidian_deb_file" "$obsidian_deb_url" || error "Failed to download Obsidian .deb"
+# Removed --quiet for better error reporting from wget
+wget -O "$obsidian_deb_file" "$obsidian_deb_url" || error "Failed to download Obsidian .deb"
 
 log "Installing Obsidian .deb package..."
-# Use apt install to handle dependencies; use -f to attempt fixing broken deps if any occur
 if sudo apt install -y "$obsidian_deb_file"; then
     log "Obsidian installed successfully."
 else
      warning "Initial install failed, attempting dependency fix (-f install)..."
      sudo apt --fix-broken install -y || error "Failed to install Obsidian .deb package even after attempting to fix dependencies."
-     # Re-attempt install after -f
      sudo apt install -y "$obsidian_deb_file" || error "Failed to install Obsidian .deb package after dependency fix."
      log "Obsidian installed successfully after dependency fix."
 fi
-# Temp dir cleanup happens via trap
 
 # --- Install Neovim (Latest Stable Binary) ---
 log "Installing Neovim (latest stable pre-built binary)..."
 tmp_dir_nvim=$(mktemp -d) || error "Failed to create temporary directory for Neovim"
-# Trap already set, just ensure variable is included
 
 neovim_tar_url=$(get_latest_github_asset_url "neovim/neovim" "nvim-linux64.tar.gz$")
 neovim_tar_file="$tmp_dir_nvim/$(basename "$neovim_tar_url")"
 
 log "Downloading Neovim from $neovim_tar_url..."
-wget --quiet -O "$neovim_tar_file" "$neovim_tar_url" || error "Failed to download Neovim tar.gz"
+# Removed --quiet for better error reporting from wget
+wget -O "$neovim_tar_file" "$neovim_tar_url" || error "Failed to download Neovim tar.gz"
 
 log "Extracting Neovim to $NVIM_INSTALL_DIR..."
 sudo rm -rf "$NVIM_INSTALL_DIR"
@@ -341,7 +392,6 @@ sudo install -d "$(dirname "$NVIM_SYMLINK")"
 sudo ln -sf "$NVIM_INSTALL_DIR/bin/nvim" "$NVIM_SYMLINK" || error "Failed to create Neovim symlink"
 
 log "Neovim installed successfully to $NVIM_INSTALL_DIR and linked to $NVIM_SYMLINK."
-# Temp dir cleanup happens via trap
 
 
 # --- Zsh / Oh My Zsh Setup ---
@@ -397,6 +447,9 @@ echo "--------------------------------------------------"
 echo "Highlights:"
 echo "- Initial system cleanup performed."
 echo "- Liquorix Kernel installed (will be default on next boot)."
+echo "- KVM/QEMU/virt-manager virtualization support installed."
+echo "  (User '$current_user' added to 'libvirt' group - LOGOUT/LOGIN REQUIRED to use virt-manager without sudo)."
+echo "  (Ensure your CPU supports VT-x/AMD-V and it's enabled in BIOS/UEFI)."
 echo "- Debian Backports repository enabled (use '-t ${debian_codename}-backports' to install from it)."
 echo "- LibreOffice installed from standard Debian repository (PPA not used)."
 echo "- Oh My Zsh installed (Run 'chsh -s \$(which zsh)' to set as default)."
@@ -409,6 +462,7 @@ echo "- Tailscale installed (run 'sudo tailscale up' to configure)."
 echo "- Google Chrome & VS Code installed."
 echo ""
 echo "ACTION REQUIRED: Configure Zsh plugins in ~/.zshrc and optionally change default shell."
+echo "ACTION REQUIRED: Log out and log back in to activate 'libvirt' group membership for managing VMs."
 echo "RECOMMENDED: Reboot your system to use the new Liquorix kernel: sudo reboot"
 echo "--------------------------------------------------"
 
