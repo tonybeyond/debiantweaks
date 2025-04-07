@@ -1,19 +1,17 @@
 #!/bin/bash
 
 # Debian Tweaks Installation Script
-# Corrected, Optimized, and Modified Version
-# Based on: https://github.com/tonybeyond/debiantweaks/blob/main/debian-install-2025.sh
+# Enhanced Version incorporating elements from tonybeyond/debiantweaks
 # Changes:
-# - Replaced Netbird with Tailscale
-# - Removed Snap usage (no snapd, Postman)
-# - Installs Obsidian via latest .deb from GitHub releases
-# - Installs latest stable Neovim via pre-built binary from GitHub releases
-# - Adds Flatpak support and Flathub remote
-# - Adds Brave Browser installation
-# - Adds Oh My Zsh and selected plugins installation (user configuration required)
-# - Adds Debian Backports repository
-# - Adds Liquorix Kernel repository and installs the kernel
-# - Improved error handling, package management, and security practices
+# - Added Initial System Cleanup phase.
+# - Removed PPA usage (LibreOffice installed from Debian Repos).
+# - Installs Liquorix Kernel & enables Backports.
+# - Installs Obsidian (.deb), Neovim (binary), Brave, Chrome, VSCode.
+# - Installs Tailscale.
+# - Sets up Flatpak & Flathub.
+# - Sets up Oh My Zsh & plugins (user configuration required).
+# - Uses secure APT key/repo methods.
+# - Includes error handling and helper functions.
 
 # Exit immediately if a command exits with a non-zero status.
 # Treat unset variables as an error.
@@ -25,38 +23,30 @@ readonly KEYRINGS_DIR="/etc/apt/keyrings"
 readonly SOURCES_DIR="/etc/apt/sources.list.d"
 readonly NVIM_INSTALL_DIR="/opt/nvim-linux64"
 readonly NVIM_SYMLINK="/usr/local/bin/nvim"
-# Define Oh My Zsh custom dir for clarity (use $HOME expansion at runtime)
-readonly ZSH_CUSTOM_DIR_VARNAME="\$HOME/.oh-my-zsh/custom"
+readonly ZSH_CUSTOM_DIR_VARNAME="\$HOME/.oh-my-zsh/custom" # Use eval to expand later
 
 # --- Helper Functions ---
 log() {
-    echo ">>> [INFO] $1"
+    echo ">>> [INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1"
 }
 
 warning() {
-    echo ">>> [WARN] $1"
+    echo ">>> [WARN] $(date '+%Y-%m-%d %H:%M:%S') - $1"
 }
 
 error() {
-    echo ">>> [ERROR] $1" >&2
+    echo ">>> [ERROR] $(date '+%Y-%m-%d %H:%M:%S') - $1" >&2
     exit 1
 }
 
 # Function to install packages if they are not already installed
 install_packages() {
-    # Check if any arguments were passed
     if [ $# -eq 0 ]; then
         log "No packages specified for installation."
         return 0
     fi
-    log "Installing packages: $*"
+    log "Installing/Ensuring packages: $*"
     sudo apt install -y "$@" || error "Failed to install packages: $*"
-}
-
-# Function to add a PPA repository
-add_ppa() {
-    log "Adding PPA: $1"
-    sudo add-apt-repository -y "$1" || error "Failed to add PPA: $1"
 }
 
 # Function to add GPG key and repository using the modern method (/etc/apt/keyrings)
@@ -64,11 +54,10 @@ add_key_repo() {
     local name="$1"
     local key_url="$2"
     local repo_string="$3"
-    local arch="${4:-amd64}" # Default architecture to amd64 if not provided
+    local arch="${4:-amd64}"
 
     log "Adding GPG key for $name from $key_url"
     local keyring_path="$KEYRINGS_DIR/${name}-keyring.gpg"
-    # Download and dearmor the key
     curl -fsSL "$key_url" | sudo gpg --dearmor -o "$keyring_path" || error "Failed to download or dearmor GPG key for $name from $key_url"
     sudo chmod a+r "$keyring_path"
 
@@ -78,19 +67,15 @@ add_key_repo() {
 }
 
 # Function to get latest GitHub release asset URL
-# $1: GitHub repo (e.g., obsidianmd/obsidian-releases)
-# $2: Asset name pattern (e.g., _amd64.deb$)
 get_latest_github_asset_url() {
     local repo="$1"
     local pattern="$2"
     local api_url="https://api.github.com/repos/${repo}/releases/latest"
     log "Fetching latest release info from $api_url for pattern $pattern"
     local download_url
-    # Increased robustness for rate limiting / errors from curl/jq
     if ! download_url=$(curl -fsSL "$api_url" | jq -r --arg PATTERN "$pattern" '.assets[] | select(.name | test($PATTERN)) | .browser_download_url' | head -n 1); then
          error "Failed to fetch or parse release info from $api_url. Check connection or API rate limits."
     fi
-
     if [[ -z "$download_url" ]]; then
         error "Could not find asset matching '$pattern' for latest release of $repo."
     fi
@@ -100,48 +85,41 @@ get_latest_github_asset_url() {
 # Function to check/install prerequisite commands
 check_install_command() {
     local cmd="$1"
-    local pkg="${2:-$1}" # Package name defaults to command name
+    local pkg="${2:-$1}"
     if ! command -v "$cmd" &> /dev/null; then
         log "$cmd not found. Installing $pkg..."
-        # Ensure apt update has run at least once before trying to install
-        if ! sudo apt-get update &>/dev/null; then
-             log "Running initial apt update to install prerequisites..."
-             sudo apt-get update || error "Initial apt update failed."
-        fi
-        sudo apt-get install -y "$pkg" || error "Failed to install $pkg"
+        # Avoid running apt update here repeatedly, assume it runs before major install steps
+        sudo apt-get install -y "$pkg" || error "Failed to install prerequisite $pkg"
     fi
 }
 
 # Function to install Oh My Zsh non-interactively
 install_oh_my_zsh() {
-     if [ -d "$HOME/.oh-my-zsh" ]; then
-        log "Oh My Zsh already installed in $HOME/.oh-my-zsh. Skipping installation."
-        return 0 # Indicate success/already installed
+    local omz_dir="$HOME/.oh-my-zsh"
+     if [ -d "$omz_dir" ]; then
+        log "Oh My Zsh already installed in $omz_dir. Skipping installation."
+        return 0
     fi
-
-    if ! command -v zsh &> /dev/null; then
-        warning "Zsh command not found. Cannot install Oh My Zsh."
-        return 1
-    fi
-    if ! command -v git &> /dev/null; then
-        warning "git command not found. Cannot install Oh My Zsh."
-        return 1
-    fi
+    # Ensure dependencies are present first
+    check_install_command "zsh"
+    check_install_command "git"
+    check_install_command "curl"
 
     log "Installing Oh My Zsh (non-interactive)..."
-    # Run the installer script non-interactively (won't change shell or run zsh)
-    # Pass "" --unattended to the sh -c script
     if sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended; then
         log "Oh My Zsh installation script finished."
-        # Verify installation directory
-        if [ ! -d "$HOME/.oh-my-zsh" ]; then
-             warning "Oh My Zsh install script ran, but $HOME/.oh-my-zsh directory not found!"
+        if [ ! -d "$omz_dir" ]; then
+             warning "Oh My Zsh install script ran, but $omz_dir directory not found!"
              return 1
         fi
-        # Check if .zshrc was created (it should be by the unattended install)
         if [ ! -f "$HOME/.zshrc" ]; then
-            warning "Oh My Zsh installed, but ~/.zshrc was not created. You may need to configure it manually."
-            # Consider copying template: cp "$HOME/.oh-my-zsh/templates/zshrc.zsh-template" "$HOME/.zshrc"
+            warning "Oh My Zsh installed, but ~/.zshrc was not created. Attempting to copy template."
+            if [ -f "$omz_dir/templates/zshrc.zsh-template" ]; then
+                 cp "$omz_dir/templates/zshrc.zsh-template" "$HOME/.zshrc"
+                 log "Copied default ~/.zshrc template."
+            else
+                 warning "Could not find Oh My Zsh template file."
+            fi
         fi
         return 0
     else
@@ -151,25 +129,21 @@ install_oh_my_zsh() {
 }
 
 # Function to install a Zsh plugin
-# $1: Plugin name (directory name)
-# $2: Git repository URL
-# $3: Optional clone arguments (e.g., --depth 1)
 install_zsh_plugin() {
     local name="$1"
     local url="$2"
     local clone_args="${3:-}"
-    # Expand $HOME when the function is called
     local custom_plugins_dir
-    custom_plugins_dir=$(eval echo "$ZSH_CUSTOM_DIR_VARNAME/plugins") # Use eval to expand ~ or $HOME correctly
+    custom_plugins_dir=$(eval echo "$ZSH_CUSTOM_DIR_VARNAME/plugins") # Expand $HOME/~/etc correctly
     local target_dir="$custom_plugins_dir/$name"
 
-    # Ensure OMZ custom directory structure exists
     mkdir -p "$custom_plugins_dir" || error "Failed to create Zsh custom plugins directory: $custom_plugins_dir"
 
     if [ -d "$target_dir" ]; then
         log "Zsh plugin '$name' already exists in $target_dir. Skipping clone."
     else
         log "Installing zsh plugin '$name' from $url..."
+        check_install_command "git" # Ensure git is available
         if git clone $clone_args "$url" "$target_dir"; then
              log "Plugin '$name' installed successfully."
         else
@@ -178,33 +152,59 @@ install_zsh_plugin() {
     fi
 }
 
-
 # --- Sanity Checks ---
 if [[ "$EUID" -eq 0 ]]; then
    error "This script should not be run as root. Run as a regular user with sudo privileges."
 fi
-
 if ! command -v sudo &> /dev/null; then
-    error "sudo command not found. Please install sudo and configure it for your user."
+    # Simple check if sudo exists and the user can run it non-interactively
+    if ! sudo -n true &>/dev/null; then
+        error "sudo command not found or user cannot run sudo without a password. Please configure sudo privileges."
+    fi
 fi
 
-# Check essential commands early, install if missing
+# --- START SCRIPT ---
+log "Starting Debian Tweaks Installation Script..."
+start_time=$(date +%s)
+
+# --- Initial System Cleanup & Update ---
+log "Starting initial system cleanup and update phase..."
+sudo apt-get update -y || warning "Initial 'apt update' failed, proceeding with caution."
+
+# Purge selected packages (customize as needed)
+# Purging LibreOffice here as we will reinstall the Debian version (no PPA used)
+log "Purging existing LibreOffice packages (will reinstall standard version later)..."
+sudo apt-get purge -y libreoffice* || warning "Failed to purge libreoffice packages, proceeding anyway."
+# Examples of other packages you might want to remove:
+# log "Purging Firefox ESR (optional)..."
+# sudo apt-get purge -y firefox-esr || warning "Failed to purge firefox-esr."
+# log "Purging GNOME Games (optional)..."
+# sudo apt-get purge -y gnome-games* elementary-games* || warning "Failed to purge gnome-games."
+
+log "Upgrading existing packages..."
+sudo apt-get upgrade -y || warning "Initial 'apt upgrade' failed, proceeding."
+log "Removing unused packages and dependencies..."
+sudo apt-get --purge autoremove -y || warning "Initial 'apt autoremove' failed."
+log "Cleaning APT cache..."
+sudo apt-get autoclean -y || warning "Initial 'apt autoclean' failed."
+sudo apt-get clean -y || warning "Initial 'apt clean' failed."
+log "Initial cleanup phase complete."
+
+# --- Check/Install Prerequisites ---
+log "Checking/Installing essential prerequisites..."
 check_install_command "curl"
 check_install_command "gpg"
 check_install_command "jq"
 check_install_command "wget"
-check_install_command "git" # Needed for Zsh plugins
-check_install_command "lsb-release" # Needed for backports codename
+check_install_command "git"
+check_install_command "lsb-release"
+check_install_command "ca-certificates" # Often needed by curl/wget
 
-# --- Main Script ---
-log "Starting Debian Tweaks installation script..."
-
-# Create directories for keys and sources if they don't exist
+# --- Configure APT Directories ---
 log "Ensuring APT configuration directories exist..."
 sudo install -m 0755 -d "$KEYRINGS_DIR"
 sudo install -m 0755 -d "$SOURCES_DIR"
-# Also ensure /usr/share/keyrings exists for Brave
-sudo install -d -m 0755 /usr/share/keyrings
+sudo install -d -m 0755 /usr/share/keyrings # For Brave
 
 # --- Configure APT Repositories ---
 log "Configuring APT repositories..."
@@ -213,11 +213,9 @@ log "Configuring APT repositories..."
 debian_codename=$(lsb_release -cs)
 log "Detected Debian Codename: $debian_codename"
 log "Enabling Debian Backports repository..."
+# Include non-free-firmware as it's often needed
 echo "deb http://deb.debian.org/debian ${debian_codename}-backports main contrib non-free non-free-firmware" | sudo tee "/etc/apt/sources.list.d/backports.list" > /dev/null || error "Failed to add Backports repository"
 log "Backports enabled. Install packages using: sudo apt install -t ${debian_codename}-backports <package>"
-
-# Add PPA for LibreOffice
-add_ppa "ppa:libreoffice/ppa"
 
 # Add repository for Google Chrome
 add_key_repo "google-chrome" \
@@ -233,7 +231,7 @@ add_key_repo "vscode" \
 log "Configuring Brave Browser repository..."
 brave_keyring="/usr/share/keyrings/brave-browser-archive-keyring.gpg"
 sudo curl -fsSLo "$brave_keyring" "https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg" || error "Failed to download Brave GPG key"
-sudo chmod a+r "$brave_keyring" # Ensure readable by apt
+sudo chmod a+r "$brave_keyring"
 echo "deb [signed-by=${brave_keyring} arch=amd64] https://brave-browser-apt-release.s3.brave.com/ stable main" | sudo tee "/etc/apt/sources.list.d/brave-browser-release.list" > /dev/null || error "Failed to add Brave repository"
 
 # Add Liquorix Kernel Repository
@@ -248,22 +246,21 @@ warning "Liquorix kernel source is often based on Debian Sid/Testing. While gene
 
 # --- Flatpak Setup ---
 log "Setting up Flatpak and Flathub..."
-check_install_command "flatpak" # Ensure flatpak is installed before configuration
+# Install flatpak package first
+install_packages flatpak
 sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 log "Flatpak configured with Flathub remote."
 
 
 # --- System Update & Package Installation ---
 log "Updating package lists after adding all repositories..."
-sudo apt update
+sudo apt-get update -y || error "Failed to update package lists after adding repositories."
 
-# Install essential dependencies, common tools, and applications from repositories
 log "Installing base packages, tools, applications, and Liquorix Kernel..."
+# Combined list of essential tools and desired applications
 install_packages \
     apt-transport-https \
-    ca-certificates \
     software-properties-common \
-    lsb-release \
     zsh \
     htop \
     neofetch \
@@ -283,7 +280,6 @@ install_packages \
     python3-openssl \
     fonts-firacode \
     flameshot \
-    flatpak \
     libreoffice \
     google-chrome-stable \
     code \
@@ -293,7 +289,6 @@ install_packages \
 
 # Install Tailscale
 log "Installing Tailscale..."
-# Note: Using curl | sh can be a security risk. Review the script at https://tailscale.com/install.sh if concerned.
 if curl -fsSL https://tailscale.com/install.sh | sh; then
     log "Tailscale installation script executed."
 else
@@ -313,10 +308,15 @@ log "Downloading Obsidian from $obsidian_deb_url..."
 wget --quiet -O "$obsidian_deb_file" "$obsidian_deb_url" || error "Failed to download Obsidian .deb"
 
 log "Installing Obsidian .deb package..."
+# Use apt install to handle dependencies; use -f to attempt fixing broken deps if any occur
 if sudo apt install -y "$obsidian_deb_file"; then
     log "Obsidian installed successfully."
 else
-    error "Failed to install Obsidian .deb package. Check dependencies."
+     warning "Initial install failed, attempting dependency fix (-f install)..."
+     sudo apt --fix-broken install -y || error "Failed to install Obsidian .deb package even after attempting to fix dependencies."
+     # Re-attempt install after -f
+     sudo apt install -y "$obsidian_deb_file" || error "Failed to install Obsidian .deb package after dependency fix."
+     log "Obsidian installed successfully after dependency fix."
 fi
 # Temp dir cleanup happens via trap
 
@@ -381,24 +381,24 @@ log "  chsh -s $(which zsh)"
 log "(You will likely need to log out and log back in for the change to take full effect)."
 
 
-# Final system upgrade and cleanup
-log "Performing final system upgrade..."
-sudo apt upgrade -y
+# Final system cleanup
+log "Performing final cleanup..."
+sudo apt-get --purge autoremove -y || warning "Final 'apt autoremove' failed."
+sudo apt-get autoclean -y || warning "Final 'apt autoclean' failed."
+sudo apt-get clean -y || warning "Final 'apt clean' failed."
 
-log "Cleaning up unused packages..."
-sudo apt autoremove -y
+end_time=$(date +%s)
+duration=$((end_time - start_time))
 
-# Clean APT cache
-log "Cleaning APT cache..."
-sudo apt clean
-
-log "Installation script finished!"
+log "Installation script finished in $duration seconds!"
 echo "--------------------------------------------------"
 echo "SYSTEM SETUP COMPLETE"
 echo "--------------------------------------------------"
 echo "Highlights:"
+echo "- Initial system cleanup performed."
 echo "- Liquorix Kernel installed (will be default on next boot)."
 echo "- Debian Backports repository enabled (use '-t ${debian_codename}-backports' to install from it)."
+echo "- LibreOffice installed from standard Debian repository (PPA not used)."
 echo "- Oh My Zsh installed (Run 'chsh -s \$(which zsh)' to set as default)."
 echo "- Zsh plugins downloaded (Edit ~/.zshrc to enable: zsh-autosuggestions, zsh-syntax-highlighting OR fast-syntax-highlighting, zsh-autocomplete)."
 echo "- Brave Browser installed."
@@ -406,7 +406,7 @@ echo "- Obsidian (latest .deb) installed."
 echo "- Neovim (latest stable binary) installed to $NVIM_INSTALL_DIR, linked to $NVIM_SYMLINK."
 echo "- Flatpak support enabled with Flathub remote added."
 echo "- Tailscale installed (run 'sudo tailscale up' to configure)."
-echo "- Google Chrome, VS Code, LibreOffice, etc., installed."
+echo "- Google Chrome & VS Code installed."
 echo ""
 echo "ACTION REQUIRED: Configure Zsh plugins in ~/.zshrc and optionally change default shell."
 echo "RECOMMENDED: Reboot your system to use the new Liquorix kernel: sudo reboot"
