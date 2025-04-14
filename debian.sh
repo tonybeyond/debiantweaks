@@ -169,6 +169,17 @@ install_oh_my_zsh() {
     fi
 }
 
+# Function to install Pop Shell
+install_pop_shell () {
+    cd "$DOWNLOADS_PATH" || log_error "Failed to change directory to $DOWNLOADS_PATH"
+    echo "Installing Pop Shell..."
+    if [ ! -d "shell" ]; then
+        git clone https://github.com/pop-os/shell.git --depth=1 --branch=master_jammy || log_error "Failed to clone Pop Shell repository"
+    fi
+    cd shell/ || log_error "Failed to change directory to shell"
+    make local-install || log_error "Failed to install Pop Shell"
+}
+
 # Function to install a Zsh plugin
 install_zsh_plugin() {
     local name="$1"
@@ -452,6 +463,9 @@ log "To make Zsh default shell: chsh -s $(which zsh) (Requires logout/login)"
 
 # change local for FR CH
 modify_locales
+
+# install pop shell
+install_pop_shell
 
 # Final system cleanup
 log "Performing final cleanup..."
