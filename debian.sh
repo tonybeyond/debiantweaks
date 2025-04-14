@@ -195,6 +195,13 @@ install_zsh_plugin() {
     fi
 }
 
+# Function to modify locales
+modify_locales () {
+    echo "Modifying locales..."
+    sudo sed -i 's/# fr_CH.UTF/fr_CH.UTF/' /etc/locale.gen
+    sudo locale-gen || log_error "Failed to modify locales"
+}
+
 # Function to install Neovim from source - FIXED
 install_neovim_from_source() {
     log "Installing Neovim from source..."
@@ -441,6 +448,10 @@ else
 fi
 
 log "To make Zsh default shell: chsh -s $(which zsh) (Requires logout/login)"
+
+
+# change local for FR CH
+modify_locales
 
 # Final system cleanup
 log "Performing final cleanup..."
