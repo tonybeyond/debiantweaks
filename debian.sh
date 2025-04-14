@@ -396,7 +396,7 @@ install_packages \
     linux-image-liquorix-amd64 linux-headers-liquorix-amd64 \
     qemu-system-x86 libvirt-daemon-system libvirt-clients virt-manager bridge-utils \
     virtinst qemu-utils ovmf dnsmasq-base \
-    ninja-build gettext cmake unzip stow fzf exa node-typescript
+    ninja-build gettext cmake unzip stow fzf exa node-typescript xclip
 
 # --- Configure Virtualization ---
 log "Configuring virtualization..."
