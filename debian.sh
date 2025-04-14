@@ -174,10 +174,10 @@ install_pop_shell () {
     cd "$DOWNLOADS_PATH" || log_error "Failed to change directory to $DOWNLOADS_PATH"
     echo "Installing Pop Shell..."
     if [ ! -d "shell" ]; then
-        git clone https://github.com/pop-os/shell.git --depth=1 --branch=master_jammy || log_error "Failed to clone Pop Shell repository"
+        git clone https://github.com/pop-os/shell.git --depth=1 --branch=master_jammy || warning "Failed to clone Pop Shell repository"
     fi
-    cd shell/ || log_error "Failed to change directory to shell"
-    make local-install || log_error "Failed to install Pop Shell"
+    cd shell/ || warning "Failed to change directory to shell"
+    make local-install || warning "Failed to install Pop Shell"
 }
 
 # Function to install a Zsh plugin
@@ -396,7 +396,7 @@ install_packages \
     linux-image-liquorix-amd64 linux-headers-liquorix-amd64 \
     qemu-system-x86 libvirt-daemon-system libvirt-clients virt-manager bridge-utils \
     virtinst qemu-utils ovmf dnsmasq-base \
-    ninja-build gettext cmake unzip stow fzf exa
+    ninja-build gettext cmake unzip stow fzf exa node-typescript
 
 # --- Configure Virtualization ---
 log "Configuring virtualization..."
