@@ -1,4 +1,4 @@
-# If you come from bash you might have to change your $PATH.
+ If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
 
 # Path to your Oh My Zsh installation.
@@ -105,13 +105,15 @@ alias tag='git tag'
 alias newtag='git tag -a'
 
 # system reporting
-hyfetch
+neofetch
 
 # adding go and fabric paths
 export PATH=$PATH:/usr/local/go/bin
-export PATH=$PATH:/home/uby/go/bin
+export PATH=$PATH:/home/$USER/go/bin
 
 # some define alias for fabric user frindly approach
-alias ytsum='function _ytsum() { fabric -y "$1" --stream --pattern summarize; }; _ytsum'
-alias claims='xclip -selection clipboard -o | fabric --stream --pattern analyze_claims'
-alias summarize='xclip -selection clipboard -o | fabric --stream --pattern summarize'
+alias ytsum='function _ytsum() { fabric -y "$1" --pattern youtube_summary | glow; }; _ytsum'
+alias claims='xclip -selection clipboard -o | fabric --stream --pattern analyze_claims | glow'
+alias summarize='xclip -selection clipboard -o | fabric --stream --pattern summarize | glow'
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit && compinit
